@@ -46,7 +46,7 @@ namespace LuaInterface
 
 #if UNITY_EDITOR
         static int _instanceID = -1;
-        static int _line = 200;
+        static int _line = 201;
         private static object consoleWindow;
         private static object logListView;
         private static FieldInfo logListViewCurrentRow;
@@ -155,14 +155,15 @@ namespace LuaInterface
                     int line = LuaDLL.tolua_where(L, 1);
                     string filename = LuaDLL.lua_tostring(L, -1);
                     LuaDLL.lua_settop(L, n);
+                    int offset = filename[0] == '@' ? 1 : 0;
 
                     if (!filename.Contains("."))
                     {
-                        sb.Append('[').Append(filename).Append(".lua:").Append(line).Append("]:");
+                        sb.Append('[').Append(filename, offset, filename.Length - offset).Append(".lua:").Append(line).Append("]:");
                     }
                     else
                     {
-                        sb.Append('[').Append(filename).Append(':').Append(line).Append("]:");
+                        sb.Append('[').Append(filename, offset, filename.Length - offset).Append(':').Append(line).Append("]:");
                     }
 #endif
 
@@ -226,9 +227,9 @@ namespace LuaInterface
                 if (LuaConst.openLuaDebugger)
                 {
                     fileName = LuaFileUtils.Instance.FindFile(fileName);
-                }
+                }                
 
-                if (LuaDLL.luaL_loadbuffer(L, buffer, buffer.Length, fileName) != 0)
+                if (LuaDLL.luaL_loadbuffer(L, buffer, buffer.Length, "@"+ fileName) != 0)
                 {
                     string err = LuaDLL.lua_tostring(L, -1);
                     throw new LuaException(err, LuaException.GetLastError());
@@ -454,12 +455,17 @@ namespace LuaInterface
                 FieldInfo listViewFieldInfo = consoleWindowType.GetField("m_ListView", BindingFlags.Instance | BindingFlags.NonPublic);
                 logListView = listViewFieldInfo.GetValue(consoleWindow);
                 logListViewCurrentRow = listViewFieldInfo.FieldType.GetField("row", BindingFlags.Instance | BindingFlags.Public);
-
-                Type logEntriesType = unityEditorAssembly.GetType("UnityEditorInternal.LogEntries");
+#if UNITY_2017_1_OR_NEWER
+                Type logEntriesType = unityEditorAssembly.GetType("UnityEditor.LogEntries");
+                LogEntriesGetEntry = logEntriesType.GetMethod("GetEntryInternal", BindingFlags.Static | BindingFlags.Public);
+                Type logEntryType = unityEditorAssembly.GetType("UnityEditor.LogEntry");                
+#else
+                Type logEntriesType = unityEditorAssembly.GetType("UnityEditorInternal.LogEntries");                
                 LogEntriesGetEntry = logEntriesType.GetMethod("GetEntryInternal", BindingFlags.Static | BindingFlags.Public);
                 Type logEntryType = unityEditorAssembly.GetType("UnityEditorInternal.LogEntry");
+#endif
                 logEntry = Activator.CreateInstance(logEntryType);
-                logEntryCondition = logEntryType.GetField("condition", BindingFlags.Instance | BindingFlags.Public);                
+                logEntryCondition = logEntryType.GetField("condition", BindingFlags.Instance | BindingFlags.Public);
             }
 
             return true;
@@ -575,7 +581,7 @@ namespace LuaInterface
         }
 #endif
 #endregion
-    /*-------------------------------------------------------------------------------------------*/
+                /*-------------------------------------------------------------------------------------------*/
 
         public static string ToString(IntPtr L, int stackPos)
         {
@@ -700,6 +706,7 @@ namespace LuaInterface
                 float dx = (float)LuaDLL.lua_tonumber(L, top + 4);
                 float dy = (float)LuaDLL.lua_tonumber(L, top + 5);
                 float dz = (float)LuaDLL.lua_tonumber(L, top + 6);
+                LuaDLL.lua_settop(L, top);
                 return new Ray(new Vector3(ox, oy, oz), new Vector3(dx, dy, dz));
             }
             else
@@ -721,6 +728,7 @@ namespace LuaInterface
             {
                 Vector3 center = ToVector3(L, top + 1);
                 Vector3 size = ToVector3(L, top + 2);
+                LuaDLL.lua_settop(L, top);
                 return new Bounds(center, size);
             }
             else
@@ -1019,6 +1027,10 @@ namespace LuaInterface
 
                 return null;
             }
+            else if (LuaDLL.lua_isnil(L, stackPos))
+            {
+                return null;
+            }
 
             LuaDLL.luaL_typerror(L, stackPos, "Type");
             return null;
@@ -1043,6 +1055,10 @@ namespace LuaInterface
                     LuaDLL.luaL_argerror(L, stackPos, string.Format("Type expected, got {0}", obj.GetType().FullName));
                 }
 
+                return null;
+            }
+            else if (LuaDLL.lua_isnil(L, stackPos))
+            {
                 return null;
             }
 
@@ -1086,7 +1102,7 @@ namespace LuaInterface
                         return obj;
                     }
 
-                    LuaDLL.luaL_argerror(L, stackPos, string.Format("{0} expected, got {1}", type.FullName, objType.FullName));
+                    LuaDLL.luaL_argerror(L, stackPos, string.Format("{0} expected, got {1}", LuaMisc.GetTypeName(type), LuaMisc.GetTypeName(objType)));
                 }
 
                 return null;
@@ -1096,7 +1112,7 @@ namespace LuaInterface
                 return null;
             }
 
-            LuaDLL.luaL_typerror(L, stackPos, type.FullName);
+            LuaDLL.luaL_typerror(L, stackPos, LuaMisc.GetTypeName(type));
             return null;
         }
 
@@ -2746,7 +2762,7 @@ namespace LuaInterface
                 }
                 else if (t == typeof(LayerMask))
                 {
-                    Push(L, (LayerMask)obj);
+                    PushLayerMask(L, (LayerMask)obj);
                 }
                 else
                 {

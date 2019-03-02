@@ -45,6 +45,7 @@ namespace LuaInterface
     public struct LuaByteBuffer
     {        
         public LuaByteBuffer(IntPtr source, int len)
+            : this()            
         {
             buffer = new byte[len];
             Length = len;
@@ -52,18 +53,21 @@ namespace LuaInterface
         }
         
         public LuaByteBuffer(byte[] buf)
+            : this()
         {
             buffer = buf;
             Length = buf.Length;            
         }
 
         public LuaByteBuffer(byte[] buf, int len)
+            : this()
         {            
             buffer = buf;
             Length = len;
         }
 
-        public LuaByteBuffer(System.IO.MemoryStream stream)
+        public LuaByteBuffer(System.IO.MemoryStream stream)   
+            : this()         
         {
             buffer = stream.GetBuffer();
             Length = (int)stream.Length;            
@@ -273,7 +277,7 @@ namespace LuaInterface
         static string GetGenericName(Type t)
         {
             Type[] gArgs = t.GetGenericArguments();
-            string typeName = t.FullName;
+            string typeName = t.FullName ?? t.Name;
             int count = gArgs.Length;
             int pos = typeName.IndexOf("[");
 
@@ -530,34 +534,28 @@ namespace LuaInterface
         [NoToLuaAttribute]
         public EventOp op = EventOp.None;
         [NoToLuaAttribute]
-        public LuaFunction func = null;
+        public Delegate func = null;
         [NoToLuaAttribute]
-        public string name = string.Empty;
+        public Type type;
 
         [NoToLuaAttribute]
-        public EventObject(string name)
+        public EventObject(Type t)
         {
-            this.name = name;
+            type = t;
         }
 
-        public static EventObject operator +(EventObject a, LuaFunction b)
+        public static EventObject operator +(EventObject a, Delegate b)
         {
             a.op = EventOp.Add;
             a.func = b;
             return a;
         }
 
-        public static EventObject operator -(EventObject a, LuaFunction b)
+        public static EventObject operator -(EventObject a, Delegate b)
         {
             a.op = EventOp.Sub;
             a.func = b;
             return a;
-        }
-
-        [NoToLuaAttribute]
-        public override string ToString()
-        {
-            return name;
         }
     }
 }
